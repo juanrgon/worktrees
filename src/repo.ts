@@ -106,7 +106,7 @@ function parseRepoFromPath(args: { path: string }) {
       "dev",
       "src",
       "repos",
-    ];
+    ] as const;
     if (!genericDirs.includes(org)) {
       return { org, name, fullName: `${org}/${name}` };
     }

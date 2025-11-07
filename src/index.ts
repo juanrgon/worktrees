@@ -21,13 +21,15 @@ export async function main(args: { argv: string[] }) {
 
   try {
     switch (command) {
-      case 'new':
-        if (!cleanArgs[0]) {
+      case 'new': {
+        const branchArg = cleanArgs[0];
+        if (!branchArg) {
           error({ message: 'Usage: wt new <branch> [--open]' });
           process.exit(1);
         }
-        await newCommand({ branch: cleanArgs[0], open: hasOpenFlag });
+        await newCommand({ branch: branchArg, open: hasOpenFlag });
         break;
+      }
 
       case 'open':
         await openCommand({ open: true });

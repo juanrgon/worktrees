@@ -15,7 +15,7 @@ function parseEditorCommand(args: { editor: string }) {
   };
 }
 
-export async function newCommand(args: { branch: string | undefined; open: boolean }) {
+export async function newCommand(args: { branch: string; open: boolean }) {
   // All parameters required
   const initialBranch = args.branch;
   const openRequested = args.open;
@@ -25,7 +25,7 @@ export async function newCommand(args: { branch: string | undefined; open: boole
     process.exit(1);
   }
 
-  if (!initialBranch) {
+  if (!initialBranch.trim()) {
     error({ message: 'Usage: wt new <branch>' });
     process.exit(1);
   }
