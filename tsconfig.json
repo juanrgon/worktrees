@@ -1,0 +1,32 @@
+{
+  "compilerOptions": {
+    "paths": {
+      "@/*": ["./src/*"]
+    },
+    "target": "es2022",
+    "lib": ["ESNext"],
+    "typeRoots": ["./node_modules/@types", "./types"],
+    "types": ["node"],
+    "allowJs": true,
+    "skipLibCheck": true,
+    "strict": true,
+    "forceConsistentCasingInFileNames": true,
+    "noEmit": true,
+    "esModuleInterop": true,
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "resolveJsonModule": true,
+    "incremental": true,
+    "noFallthroughCasesInSwitch": true,
+    "noUncheckedIndexedAccess": true,
+    "skipDefaultLibCheck": true,
+    "isolatedModules": true,
+    "allowImportingTsExtensions": true,
+  },
+  "include": [
+    "src/**/*.ts",
+    "bin/**/*.ts",
+    "types/**/*.ts"
+  ],
+  "exclude": ["node_modules", "dist"]
+}
