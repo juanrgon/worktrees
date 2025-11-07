@@ -6,14 +6,6 @@ type GitWorktree = {
   head: string;
 };
 
-type WorktreeStatusSummary = {
-  ahead: number;
-  behind: number;
-  hasChanges: boolean;
-  modified: number;
-  untracked: number;
-};
-
 export function exec(args: { command: string; cwd: string; silent: boolean }) {
   const command = args.command;
   const cwd = args.cwd;
