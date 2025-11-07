@@ -20,11 +20,17 @@ export function exec(args: { command: string; cwd: string; silent: boolean }) {
   const silent = args.silent;
 
   try {
-    return execSync(command, {
+    const result = execSync(command, {
       cwd,
       encoding: 'utf8',
       stdio: silent ? 'pipe' : 'inherit',
-    }).trim();
+    });
+
+    if (typeof result === 'string') {
+      return result.trim();
+    }
+
+    return '';
   } catch (error) {
     if (silent) {
       return '';
@@ -95,7 +101,7 @@ export function listWorktrees(args: { repoRoot: string }) {
 export function getWorktreeStatus(args: { path: string }) {
   const worktreePath = args.path;
   const statusOutput = execQuiet({ command: 'git status --porcelain', cwd: worktreePath });
-  const lines = statusOutput.split('\n').filter(line => line);
+  const lines = statusOutput.split('\n').filter((line): line is string => line.length > 0);
   const modified = lines.filter(line => line.startsWith(' M') || line.startsWith('M ')).length;
   const untracked = lines.filter(line => line.startsWith('??')).length;
   const hasChanges = lines.length > 0;
@@ -140,6 +146,24 @@ export function createWorktree(args: { repoRoot: string; path: string; branch: s
   exec({ command, cwd: repoRoot, silent: false });
 }
 
+export function createWorktreeFromRemote(args: {
+  repoRoot: string;
+  path: string;
+  branch: string;
+  remote: string;
+}) {
+  const repoRoot = args.repoRoot;
+  const worktreePath = args.path;
+  const branch = args.branch;
+  const remote = args.remote;
+
+  exec({
+    command: `git worktree add "${worktreePath}" --track -b "${branch}" "${remote}/${branch}"`,
+    cwd: repoRoot,
+    silent: false,
+  });
+}
+
 export function removeWorktree(args: { repoRoot: string; path: string }) {
   exec({ command: `git worktree remove "${args.path}"`, cwd: args.repoRoot, silent: false });
 }
@@ -147,6 +171,10 @@ export function removeWorktree(args: { repoRoot: string; path: string }) {
 export function branchExists(args: { repoRoot: string; branch: string }) {
   const result = execQuiet({ command: `git rev-parse --verify ${args.branch} 2>/dev/null`, cwd: args.repoRoot });
   return result.length > 0;
+}
+
+export function fetchRemoteBranch(args: { repoRoot: string; remote: string; branch: string }) {
+  exec({ command: `git fetch ${args.remote} "${args.branch}"`, cwd: args.repoRoot, silent: false });
 }
 
 export const DEFAULT_BASE_BRANCH = 'main' as const;
@@ -157,7 +185,7 @@ export function getMergedBranches(args: { repoRoot: string; baseBranch: string }
   const output = execQuiet({ command: `git branch --merged ${baseBranch}`, cwd: repoRoot });
   return output
     .split('\n')
-    .map(branch => branch.trim().replace(/^\*\s+/, ''))
+    .map((branch): string => branch.trim().replace(/^\*\s+/, ''))
     .filter(branch => branch && branch !== baseBranch && branch !== 'master');
 }
 
@@ -166,15 +194,15 @@ export function getDeletedRemoteBranches(args: { repoRoot: string }) {
   execQuiet({ command: 'git fetch --prune 2>/dev/null', cwd: repoRoot });
 
   const remoteBranches = execQuiet({ command: 'git branch -r', cwd: repoRoot })
-    .split('\n')
-    .map(branch => branch.trim())
-    .filter(branch => branch && !branch.includes('HEAD'))
-    .map(branch => branch.replace('origin/', ''));
+  .split('\n')
+  .map((branch): string => branch.trim())
+  .filter(branch => branch && !branch.includes('HEAD'))
+  .map(branch => branch.replace('origin/', ''));
 
   const localBranches = execQuiet({ command: 'git branch', cwd: repoRoot })
     .split('\n')
-    .map(branch => branch.trim().replace(/^\*\s+/, ''))
-    .filter(branch => branch);
+    .map((branch): string => branch.trim().replace(/^\*\s+/, ''))
+    .filter(Boolean);
 
   return localBranches.filter(local => !remoteBranches.includes(local));
 }

@@ -1,5 +1,6 @@
 import * as clack from '@clack/prompts';
 import type { Worktree } from '../types.ts';
+import type { WorktreeSuggestion } from '../github.ts';
 import { colorize, formatStatus, formatPath } from './theme.ts';
 
 const PICKER_PATH_MAX_LENGTH = 40 as const;
@@ -10,25 +11,57 @@ export type PickerOptions = {
   currentBranch?: string;
 };
 
-export async function pickWorktree(args: { worktrees: Worktree[]; options: PickerOptions }) {
+export type WorktreeSelection =
+  | { kind: 'worktree'; worktree: Worktree }
+  | { kind: 'suggestion'; suggestion: WorktreeSuggestion };
+
+export async function pickWorktree(args: {
+  worktrees: Worktree[];
+  suggestions: WorktreeSuggestion[];
+  options: PickerOptions;
+}) {
   const worktrees = args.worktrees;
+  const suggestions = args.suggestions;
   const options = args.options;
-  if (worktrees.length === 0) {
+  if (worktrees.length === 0 && suggestions.length === 0) {
     return null;
   }
 
-  const choices = worktrees.map(wt => {
+  const worktreeChoices = worktrees.map(wt => {
+    const selection = { kind: 'worktree', worktree: wt } as const;
     const statusStr = wt.status ? formatStatus({ status: wt.status }) : '';
     const marker = wt.branch === options.currentBranch ? colorize({ text: '→', color: 'cyan' }) : ' ';
     const branchColor = wt.isMain ? 'cyan' : 'green';
     const pathStr = colorize({ text: formatPath({ path: wt.path, maxLength: PICKER_PATH_MAX_LENGTH }), color: 'dim' });
 
     return {
-      value: wt,
+      value: selection,
       label: `${marker} ${colorize({ text: wt.branch, color: branchColor })} ${statusStr}`,
       hint: pathStr,
     };
   });
+
+  const suggestionChoices = suggestions.map(suggestion => {
+    const selection = { kind: 'suggestion', suggestion } as const;
+    const marker = colorize({ text: '+', color: 'green' });
+    const branchColor = suggestion.isDraft ? 'yellow' : 'magenta';
+    const branchLabel = colorize({ text: suggestion.branch, color: branchColor });
+    const draftLabel = suggestion.isDraft ? colorize({ text: ' (draft)', color: 'dim' }) : '';
+    const prNumber = colorize({ text: `#${suggestion.number}`, color: 'cyan' });
+    const hint = suggestion.title
+      ? colorize({ text: suggestion.title, color: 'dim' })
+      : suggestion.url
+        ? colorize({ text: suggestion.url, color: 'dim' })
+        : colorize({ text: 'Remote branch', color: 'dim' });
+
+    return {
+      value: selection,
+      label: `${marker} ${branchLabel}${draftLabel} ${prNumber}`,
+      hint,
+    };
+  });
+
+  const choices = [...worktreeChoices, ...suggestionChoices];
 
   const selected = await clack.select({
     message: options.title || 'Select a worktree',
@@ -39,7 +72,7 @@ export async function pickWorktree(args: { worktrees: Worktree[]; options: Picke
     return null;
   }
 
-  if (isWorktree(selected)) {
+  if (isWorktreeSelection(selected)) {
     return selected;
   }
 
@@ -143,5 +176,11 @@ export async function handleExistingBranch(args: { branch: string }) {
   return action === 'create' || action === 'cancel' ? action : 'cancel';
 }
 
-const isWorktree = (value: unknown): value is Worktree =>
-  typeof value === 'object' && value !== null && 'path' in value && 'branch' in value;
+const isWorktreeSelection = (value: unknown): value is WorktreeSelection => {
+  if (typeof value !== 'object' || value === null) {
+    return false;
+  }
+
+  const kind = Reflect.get(value, 'kind');
+  return kind === 'worktree' || kind === 'suggestion';
+};

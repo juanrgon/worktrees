@@ -11,13 +11,19 @@
     "link": "npm link",
     "unlink": "npm unlink -g wt-cli"
   },
-  "keywords": ["git", "worktree", "cli", "workflow"],
+  "keywords": [
+    "git",
+    "worktree",
+    "cli",
+    "workflow"
+  ],
   "author": "",
   "license": "MIT",
   "dependencies": {
     "@clack/prompts": "^0.7.0",
     "@iarna/toml": "^2.2.5",
-    "fuzzysort": "^3.0.2"
+    "fuzzysort": "^3.0.2",
+    "zod": "^3.25.76"
   },
   "devDependencies": {
     "@total-typescript/ts-reset": "^0.5.1",
