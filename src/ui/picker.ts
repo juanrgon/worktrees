@@ -21,7 +21,7 @@ export async function pickWorktree(args: { worktrees: Worktree[]; options: Picke
     const statusStr = wt.status ? formatStatus({ status: wt.status }) : '';
     const marker = wt.branch === options.currentBranch ? colorize({ text: '→', color: 'cyan' }) : ' ';
     const branchColor = wt.isMain ? 'cyan' : 'green';
-  const pathStr = colorize({ text: formatPath({ path: wt.path, maxLength: PICKER_PATH_MAX_LENGTH }), color: 'dim' });
+    const pathStr = colorize({ text: formatPath({ path: wt.path, maxLength: PICKER_PATH_MAX_LENGTH }), color: 'dim' });
 
     return {
       value: wt,

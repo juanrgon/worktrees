@@ -2,9 +2,9 @@ import { join } from 'path';
 import { mkdirSync, existsSync } from 'fs';
 import { detectRepoInfo } from '../repo.ts';
 import { loadConfig, expandPath } from '../config.ts';
-import { branchExists, createWorktree, getCurrentBranch } from '../git.ts';
+import { branchExists, createWorktree } from '../git.ts';
 import { error, success, info, colorize } from '../ui/theme.ts';
-import { promptBranchName, handleExistingBranch } from '../ui/picker.ts';
+import { handleExistingBranch } from '../ui/picker.ts';
 import { spawn } from 'child_process';
 
 function parseEditorCommand(args: { editor: string }) {
@@ -33,12 +33,8 @@ export async function newCommand(args: { branch: string | undefined; open: boole
   const config = loadConfig({ cwd: process.cwd() });
   const worktreesRoot = expandPath({ path: config.worktreesRoot || '~/worktrees' });
 
-  // Get all existing branches
-  const currentBranch = getCurrentBranch({ cwd: repoInfo.root });
-  const existingBranches = currentBranch ? [currentBranch] : [];
-
-  // Prompt for branch name if not provided
-  let branch = initialBranch;
+  // Confirm branch selection
+  const branch = initialBranch;
 
   // Check if branch already exists
   const exists = branchExists({ repoRoot: repoInfo.root, branch });
@@ -77,7 +73,7 @@ export async function newCommand(args: { branch: string | undefined; open: boole
     console.log();
 
     // Handle --open or autoOpen
-  const shouldOpen = openRequested || config.autoOpen;
+    const shouldOpen = openRequested || config.autoOpen;
     if (shouldOpen && config.editor) {
       info({ message: `Opening in ${config.editor}...` });
       const editorCommand = parseEditorCommand({ editor: config.editor });
@@ -88,8 +84,9 @@ export async function newCommand(args: { branch: string | undefined; open: boole
     } else {
       console.log(colorize({ text: `cd ${worktreePath}`, color: 'dim' }));
     }
-  } catch (err: any) {
-    error({ message: `Failed to create worktree: ${err.message}` });
+  } catch (unknownError) {
+    const message = unknownError instanceof Error ? unknownError.message : 'Unknown error';
+    error({ message: `Failed to create worktree: ${message}` });
     process.exit(1);
   }
 }

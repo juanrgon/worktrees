@@ -1,5 +1,5 @@
-import { getGitRoot, getRemoteUrl, isGitRepo } from './git.ts';
-import { loadConfig } from './config.ts';
+import { getGitRoot, getRemoteUrl, isGitRepo } from "./git.ts";
+import { loadConfig } from "./config.ts";
 
 export function detectRepoInfo(args: { cwd: string }) {
   // All parameters required
@@ -14,7 +14,7 @@ export function detectRepoInfo(args: { cwd: string }) {
   // Check for config override first
   const config = loadConfig({ cwd: workingDir });
   if (config.repoName) {
-    const parts = config.repoName.split('/');
+    const parts = config.repoName.split("/");
     if (parts.length === 2) {
       return {
         root,
@@ -41,10 +41,10 @@ export function detectRepoInfo(args: { cwd: string }) {
   }
 
   // Ultimate fallback: just use directory name
-  const name = root.split('/').pop() || 'unknown';
+  const name = root.split("/").pop() || "unknown";
   return {
     root,
-    org: 'local',
+    org: "local",
     name,
     fullName: `local/${name}`,
   };
@@ -58,17 +58,17 @@ function parseRepoFromRemote(args: { remoteUrl: string }) {
   // - https://github.com/github/copilot-api
 
   const patterns = [
-    /github\.com[:/]([^/]+)\/([^/.]+)/,  // GitHub
-    /gitlab\.com[:/]([^/]+)\/([^/.]+)/,  // GitLab
+    /github\.com[:/]([^/]+)\/([^/.]+)/, // GitHub
+    /gitlab\.com[:/]([^/]+)\/([^/.]+)/, // GitLab
     /bitbucket\.org[:/]([^/]+)\/([^/.]+)/, // Bitbucket
-    /[:/]([^/]+)\/([^/.]+)\.git$/,       // Generic git URL
-  ];
+    /[:/]([^/]+)\/([^/.]+)\.git$/, // Generic git URL
+  ] as const;
 
   for (const pattern of patterns) {
     const match = remoteUrl.match(pattern);
     if (match) {
       const org = match[1]!;
-      const name = match[2]!.replace(/\.git$/, '');
+      const name = match[2]!.replace(/\.git$/, "");
       return { org, name, fullName: `${org}/${name}` };
     }
   }
@@ -83,10 +83,10 @@ function parseRepoFromPath(args: { path: string }) {
   // - ~/github/copilot-api
   // - ~/code/github/copilot-api
 
-  const parts = path.split('/');
+  const parts = path.split("/");
 
   // Look for github.com/org/repo pattern
-  const githubComIndex = parts.indexOf('github.com');
+  const githubComIndex = parts.indexOf("github.com");
   if (githubComIndex >= 0 && parts.length >= githubComIndex + 3) {
     const org = parts[githubComIndex + 1]!;
     const name = parts[githubComIndex + 2]!;
@@ -95,11 +95,18 @@ function parseRepoFromPath(args: { path: string }) {
 
   // Look for org/repo pattern at the end
   if (parts.length >= 2) {
-  const name = parts[parts.length - 1]!;
-  const org = parts[parts.length - 2]!;
+    const name = parts[parts.length - 1]!;
+    const org = parts[parts.length - 2]!;
 
     // Only use this if org looks reasonable (not generic directories)
-    const genericDirs = ['code', 'projects', 'workspace', 'dev', 'src', 'repos'];
+    const genericDirs = [
+      "code",
+      "projects",
+      "workspace",
+      "dev",
+      "src",
+      "repos",
+    ];
     if (!genericDirs.includes(org)) {
       return { org, name, fullName: `${org}/${name}` };
     }

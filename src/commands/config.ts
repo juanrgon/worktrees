@@ -1,4 +1,4 @@
-import { writeFileSync, existsSync, mkdirSync } from 'fs';
+import { writeFileSync, existsSync, mkdirSync, readFileSync } from 'fs';
 import { join, dirname } from 'path';
 import { homedir } from 'os';
 import { resolveConfig, CONFIG_KEYS } from '../config.ts';
@@ -107,8 +107,7 @@ function setConfig(args: { key: string; value: string; global: boolean }) {
 function buildTomlContent(args: { configPath: string; key: string; value: string | boolean }) {
   let existingContent = '';
   if (existsSync(args.configPath)) {
-    const fs = require('fs');
-    existingContent = fs.readFileSync(args.configPath, 'utf-8');
+    existingContent = readFileSync(args.configPath, 'utf-8');
   }
 
   const lines = existingContent.split('\n').filter(line => !line.trim().startsWith(`${args.key} =`));

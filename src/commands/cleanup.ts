@@ -86,8 +86,9 @@ export async function cleanupCommand() {
       removeWorktree({ repoRoot: repoInfo.root, path: wt.path });
       info({ message: `Removed: ${wt.branch}` });
       removed++;
-    } catch (err: any) {
-      warning({ message: `Failed to remove ${wt.branch}: ${err.message}` });
+    } catch (unknownError) {
+      const message = unknownError instanceof Error ? unknownError.message : 'Unknown error';
+      warning({ message: `Failed to remove ${wt.branch}: ${message}` });
     }
   }
 

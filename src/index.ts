@@ -84,8 +84,9 @@ export async function main(args: { argv: string[] }) {
         showHelp();
         process.exit(1);
     }
-  } catch (err: any) {
-    error({ message: err.message || 'An error occurred' });
+  } catch (unknownError) {
+    const message = unknownError instanceof Error ? unknownError.message : 'An error occurred';
+    error({ message });
     process.exit(1);
   }
 }
