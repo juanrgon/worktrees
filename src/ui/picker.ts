@@ -1,9 +1,12 @@
 import * as clack from '@clack/prompts';
+import { clearLine, cursorTo, moveCursor } from 'node:readline';
+import fuzzysort from 'fuzzysort';
 import type { Worktree } from '../types.ts';
 import type { WorktreeSuggestion } from '../github.ts';
 import { colorize, formatStatus, formatPath } from './theme.ts';
 
 const PICKER_PATH_MAX_LENGTH = 40 as const;
+const MAX_VISIBLE_ITEMS = 20 as const;
 
 export type PickerOptions = {
   title?: string;
@@ -14,6 +17,28 @@ export type PickerOptions = {
 export type WorktreeSelection =
   | { kind: 'worktree'; worktree: Worktree }
   | { kind: 'suggestion'; suggestion: WorktreeSuggestion };
+
+type PickerItem =
+  | {
+      kind: 'worktree';
+      worktree: Worktree;
+      branch: string;
+      path: string;
+      title: string;
+      number: string;
+      url: string;
+      searchText: string;
+    }
+  | {
+      kind: 'suggestion';
+      suggestion: WorktreeSuggestion;
+      branch: string;
+      path: string;
+      title: string;
+      number: string;
+      url: string;
+      searchText: string;
+    };
 
 export async function pickWorktree(args: {
   worktrees: Worktree[];
@@ -26,54 +51,14 @@ export async function pickWorktree(args: {
   if (worktrees.length === 0 && suggestions.length === 0) {
     return null;
   }
-
-  const worktreeChoices = worktrees.map(wt => {
-    const selection = { kind: 'worktree', worktree: wt } as const;
-    const statusStr = wt.status ? formatStatus({ status: wt.status }) : '';
-    const marker = wt.branch === options.currentBranch ? colorize({ text: '→', color: 'cyan' }) : ' ';
-    const branchColor = wt.isMain ? 'cyan' : 'green';
-    const pathStr = colorize({ text: formatPath({ path: wt.path, maxLength: PICKER_PATH_MAX_LENGTH }), color: 'dim' });
-
-    return {
-      value: selection,
-      label: `${marker} ${colorize({ text: wt.branch, color: branchColor })} ${statusStr}`,
-      hint: pathStr,
-    };
-  });
-
-  const suggestionChoices = suggestions.map(suggestion => {
-    const selection = { kind: 'suggestion', suggestion } as const;
-    const marker = colorize({ text: '+', color: 'green' });
-    const branchColor = suggestion.isDraft ? 'yellow' : 'magenta';
-    const branchLabel = colorize({ text: suggestion.branch, color: branchColor });
-    const draftLabel = suggestion.isDraft ? colorize({ text: ' (draft)', color: 'dim' }) : '';
-    const prNumber = colorize({ text: `#${suggestion.number}`, color: 'cyan' });
-    const hint = suggestion.title
-      ? colorize({ text: suggestion.title, color: 'dim' })
-      : suggestion.url
-        ? colorize({ text: suggestion.url, color: 'dim' })
-        : colorize({ text: 'Remote branch', color: 'dim' });
-
-    return {
-      value: selection,
-      label: `${marker} ${branchLabel}${draftLabel} ${prNumber}`,
-      hint,
-    };
-  });
-
-  const choices = [...worktreeChoices, ...suggestionChoices];
-
-  const selected = await clack.select({
-    message: options.title || 'Select a worktree',
-    options: choices,
-  });
-
-  if (clack.isCancel(selected)) {
-    return null;
+  if (!process.stdin.isTTY || !process.stdout.isTTY || typeof process.stdin.setRawMode !== 'function') {
+    return fallbackPickWorktree({ worktrees, suggestions, options });
   }
 
-  if (isWorktreeSelection(selected)) {
-    return selected;
+  const items = buildPickerItems({ worktrees, suggestions });
+  const liveSelection = await runLivePicker({ items, options });
+  if (liveSelection) {
+    return liveSelection;
   }
 
   return null;
@@ -184,3 +169,347 @@ const isWorktreeSelection = (value: unknown): value is WorktreeSelection => {
   const kind = Reflect.get(value, 'kind');
   return kind === 'worktree' || kind === 'suggestion';
 };
+
+async function fallbackPickWorktree(args: {
+  worktrees: Worktree[];
+  suggestions: WorktreeSuggestion[];
+  options: PickerOptions;
+}) {
+  const options = args.options;
+  const worktreeChoices = args.worktrees.map(worktree => {
+    const selection = { kind: 'worktree', worktree } as const;
+    const display = formatWorktreeDisplay({ worktree, currentBranch: options.currentBranch });
+    return {
+      value: selection,
+      label: display.label,
+      hint: display.hint,
+    };
+  });
+
+  const suggestionChoices = args.suggestions.map(suggestion => {
+    const selection = { kind: 'suggestion', suggestion } as const;
+    const display = formatSuggestionDisplay({ suggestion });
+    return {
+      value: selection,
+      label: display.label,
+      hint: display.hint,
+    };
+  });
+
+  const choiceList = [...worktreeChoices, ...suggestionChoices];
+
+  const selected = await clack.select({
+    message: options.title || 'Select a worktree',
+    options: choiceList,
+  });
+
+  if (clack.isCancel(selected)) {
+    return null;
+  }
+
+  if (isWorktreeSelection(selected)) {
+    return selected;
+  }
+
+  return null;
+}
+
+function buildPickerItems(args: { worktrees: Worktree[]; suggestions: WorktreeSuggestion[] }) {
+  const items: PickerItem[] = [];
+
+  for (const worktree of args.worktrees) {
+    items.push({
+      kind: 'worktree',
+      worktree,
+      branch: worktree.branch,
+      path: worktree.path,
+      title: '',
+      number: '',
+      url: '',
+      searchText: `${worktree.branch} ${worktree.path}`,
+    });
+  }
+
+  for (const suggestion of args.suggestions) {
+    items.push({
+      kind: 'suggestion',
+      suggestion,
+      branch: suggestion.branch,
+      path: '',
+      title: suggestion.title ?? '',
+      number: `#${suggestion.number}`,
+      url: suggestion.url ?? '',
+      searchText: `${suggestion.branch} ${suggestion.title ?? ''} #${suggestion.number} ${suggestion.url ?? ''}`,
+    });
+  }
+
+  return items;
+}
+
+async function runLivePicker(args: { items: PickerItem[]; options: PickerOptions }) {
+  const stdin = process.stdin as NodeJS.ReadStream & { isRaw?: boolean };
+  const stdout = process.stdout;
+  const originalRawMode = stdin.isRaw === true;
+
+  return new Promise<WorktreeSelection | null>(resolve => {
+    let searchQuery = '';
+    let filteredItems = args.items;
+    let selectionIndex = filteredItems.length > 0 ? 0 : -1;
+    let lastRenderLineCount = 0;
+
+    const updateFilteredItems = () => {
+      if (searchQuery.trim().length === 0) {
+        filteredItems = args.items;
+      } else {
+        filteredItems = fuzzysort
+          .go<PickerItem>(searchQuery, args.items, {
+            keys: ['searchText', 'branch', 'path', 'title', 'number', 'url'],
+            all: true,
+          })
+          .map(result => result.obj);
+      }
+
+      if (filteredItems.length === 0) {
+        selectionIndex = -1;
+      } else if (selectionIndex === -1) {
+        selectionIndex = 0;
+      } else if (selectionIndex >= filteredItems.length) {
+        selectionIndex = filteredItems.length - 1;
+      }
+    };
+
+    const clearPreviousLines = () => {
+      if (lastRenderLineCount === 0) {
+        return;
+      }
+
+      moveCursor(stdout, 0, -lastRenderLineCount);
+      for (let index = 0; index < lastRenderLineCount; index += 1) {
+        clearLine(stdout, 0);
+        moveCursor(stdout, 0, 1);
+      }
+      moveCursor(stdout, 0, -lastRenderLineCount);
+      cursorTo(stdout, 0);
+    };
+
+    const render = () => {
+      clearPreviousLines();
+
+      const lines: string[] = [];
+      const title = args.options.title || 'Select a worktree';
+      lines.push(colorize({ text: title, color: 'bright' }));
+      lines.push(colorize({ text: 'Type to filter • ↑/↓ move • Enter select • Esc cancel', color: 'dim' }));
+      const queryDisplay = searchQuery ? colorize({ text: searchQuery, color: 'magenta' }) : colorize({ text: '∅', color: 'dim' });
+      lines.push(`Search: ${queryDisplay}`);
+      lines.push('');
+
+      if (filteredItems.length === 0) {
+        lines.push(colorize({ text: 'No matching worktrees found', color: 'yellow' }));
+      } else {
+        const { start, end } = computeVisibleWindow(filteredItems.length, selectionIndex);
+        const visibleItems = filteredItems.slice(start, end);
+
+        if (start > 0) {
+          lines.push(colorize({ text: '⋮', color: 'dim' }));
+        }
+
+        for (let index = 0; index < visibleItems.length; index += 1) {
+          const actualIndex = start + index;
+          const isSelected = actualIndex === selectionIndex;
+          const pointer = isSelected ? colorize({ text: '›', color: 'cyan' }) : ' ';
+          const item = visibleItems[index]!;
+          const display =
+            item.kind === 'worktree'
+              ? formatWorktreeDisplay({ worktree: item.worktree, currentBranch: args.options.currentBranch })
+              : formatSuggestionDisplay({ suggestion: item.suggestion });
+
+          const label = isSelected ? colorize({ text: display.label, color: 'bright' }) : display.label;
+          lines.push(`${pointer} ${label}`);
+
+          if (display.hint) {
+            const hintText = isSelected ? colorize({ text: display.hint, color: 'bright' }) : display.hint;
+            lines.push(`  ${hintText}`);
+          }
+        }
+
+        if (end < filteredItems.length) {
+          lines.push(colorize({ text: '⋮', color: 'dim' }));
+        }
+      }
+
+      lines.push('');
+      const totalLabel = `${filteredItems.length}/${args.items.length} result${filteredItems.length === 1 ? '' : 's'}`;
+      lines.push(colorize({ text: totalLabel, color: 'dim' }));
+
+      stdout.write(lines.map(line => `${line}
+`).join(''));
+      lastRenderLineCount = lines.length;
+      cursorTo(stdout, 0);
+    };
+
+    const cleanup = (result: WorktreeSelection | null) => {
+      clearPreviousLines();
+      clearLine(stdout, 0);
+      cursorTo(stdout, 0);
+      stdout.write('\x1b[?25h');
+
+      if (typeof stdin.setRawMode === 'function') {
+        stdin.setRawMode(originalRawMode);
+      }
+
+      stdin.removeListener('data', onData);
+      stdin.pause();
+      stdout.write('\n');
+      resolve(result);
+    };
+
+    const moveSelection = (delta: number) => {
+      if (filteredItems.length === 0) {
+        return;
+      }
+
+      const length = filteredItems.length;
+      const nextIndex = ((selectionIndex + delta) % length + length) % length;
+      selectionIndex = nextIndex;
+      render();
+    };
+
+    const onData = (chunk: string) => {
+      if (chunk === '\u0003' || chunk === '\u001b') {
+        cleanup(null);
+        return;
+      }
+
+      if (chunk === '\r' || chunk === '\n') {
+        if (selectionIndex >= 0 && filteredItems[selectionIndex]) {
+          const selected = filteredItems[selectionIndex]!;
+          const selection =
+            selected.kind === 'worktree'
+              ? ({ kind: 'worktree', worktree: selected.worktree } as const)
+              : ({ kind: 'suggestion', suggestion: selected.suggestion } as const);
+          cleanup(selection);
+        }
+        return;
+      }
+
+      if (chunk === '\x7f' || chunk === '\u0008' || chunk === '\u001b[3~') {
+        if (searchQuery.length > 0) {
+          searchQuery = searchQuery.slice(0, -1);
+          updateFilteredItems();
+          render();
+        }
+        return;
+      }
+
+      if (chunk === '\u001b[A' || chunk === '\u001bOA') {
+        moveSelection(-1);
+        return;
+      }
+
+      if (chunk === '\u001b[B' || chunk === '\u001bOB') {
+        moveSelection(1);
+        return;
+      }
+
+      if (chunk === '\u001b[5~') {
+        moveSelection(-MAX_VISIBLE_ITEMS);
+        return;
+      }
+
+      if (chunk === '\u001b[6~') {
+        moveSelection(MAX_VISIBLE_ITEMS);
+        return;
+      }
+
+      if (chunk.length === 1 && chunk >= ' ' && chunk <= '~') {
+        searchQuery += chunk;
+        updateFilteredItems();
+        render();
+        return;
+      }
+
+      if (!chunk.startsWith('\u001b')) {
+        let changed = false;
+        for (const char of chunk) {
+          if (char >= ' ' && char <= '~') {
+            searchQuery += char;
+            changed = true;
+          }
+        }
+        if (changed) {
+          updateFilteredItems();
+          render();
+        }
+      }
+    };
+
+    if (typeof stdin.setRawMode === 'function') {
+      stdin.setRawMode(true);
+    }
+    stdin.setEncoding('utf8');
+    stdin.resume();
+    stdout.write('\x1b[?25l');
+
+    updateFilteredItems();
+    render();
+
+    stdin.on('data', onData);
+  });
+}
+
+function formatWorktreeDisplay(args: { worktree: Worktree; currentBranch?: string }) {
+  const statusStr = args.worktree.status ? formatStatus({ status: args.worktree.status }) : '';
+  const marker = args.currentBranch === args.worktree.branch ? colorize({ text: '→', color: 'cyan' }) : ' ';
+  const branchColor = args.worktree.isMain ? 'cyan' : 'green';
+  const labelParts = [`${marker} ${colorize({ text: args.worktree.branch, color: branchColor })}`];
+  if (statusStr) {
+    labelParts.push(statusStr);
+  }
+  const label = labelParts.join(' ').trim();
+  const hint = colorize({
+    text: formatPath({ path: args.worktree.path, maxLength: PICKER_PATH_MAX_LENGTH }),
+    color: 'dim',
+  });
+  return { label, hint };
+}
+
+function formatSuggestionDisplay(args: { suggestion: WorktreeSuggestion }) {
+  const marker = colorize({ text: '+', color: 'green' });
+  const branchColor = args.suggestion.isDraft ? 'yellow' : 'magenta';
+  const branchLabel = colorize({ text: args.suggestion.branch, color: branchColor });
+  const draftLabel = args.suggestion.isDraft ? colorize({ text: ' (draft)', color: 'dim' }) : '';
+  const prNumber = colorize({ text: `#${args.suggestion.number}`, color: 'cyan' });
+  const copilotLabel = args.suggestion.copilotAssigned ? colorize({ text: ' [Copilot]', color: 'dim' }) : '';
+  const label = `${marker} ${branchLabel}${draftLabel} ${prNumber}${copilotLabel}`.trim();
+
+  const hintSegments: string[] = [];
+  if (args.suggestion.title) {
+    hintSegments.push(args.suggestion.title);
+  } else if (args.suggestion.url) {
+    hintSegments.push(args.suggestion.url);
+  } else {
+    hintSegments.push('Remote branch');
+  }
+
+  if (args.suggestion.copilotAssigned) {
+    hintSegments.push('Assigned by GitHub Copilot');
+  }
+
+  const hint = colorize({ text: hintSegments.join(' • '), color: 'dim' });
+  return { label, hint };
+}
+
+function computeVisibleWindow(total: number, selectedIndex: number) {
+  if (total <= MAX_VISIBLE_ITEMS) {
+    return { start: 0, end: total };
+  }
+
+  const halfWindow = Math.floor(MAX_VISIBLE_ITEMS / 2);
+  let start = Math.max(0, selectedIndex - halfWindow);
+  if (start + MAX_VISIBLE_ITEMS > total) {
+    start = total - MAX_VISIBLE_ITEMS;
+  }
+
+  const end = Math.min(start + MAX_VISIBLE_ITEMS, total);
+  return { start, end };
+}

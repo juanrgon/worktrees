@@ -2,14 +2,11 @@ import { spawnSync } from 'child_process';
 import { z } from 'zod';
 import type { RepoInfo } from './types.ts';
 
-const PR_JSON_FIELDS = [
-  'number',
-  'title',
-  'headRefName',
-  'url',
-  'isDraft',
-  'updatedAt',
-] as const;
+const PR_JSON_FIELDS = ['number', 'title', 'headRefName', 'url', 'isDraft', 'updatedAt', 'author'] as const;
+
+const pullRequestAuthorSchema = z.object({
+  login: z.string(),
+});
 
 const pullRequestSummarySchema = z.object({
   number: z.number(),
@@ -18,6 +15,7 @@ const pullRequestSummarySchema = z.object({
   url: z.string().optional(),
   isDraft: z.boolean().optional(),
   updatedAt: z.string().optional(),
+  author: pullRequestAuthorSchema.optional(),
 });
 
 export type PullRequestSummary = z.infer<typeof pullRequestSummarySchema>;
@@ -29,6 +27,20 @@ export type WorktreeSuggestion = {
   url?: string;
   isDraft?: boolean;
   updatedAt?: string;
+  copilotAssigned: boolean;
+};
+
+const COPILOT_AUTHOR_MARKERS = ['github-copilot', 'app/copilot', 'copilot-swe-agent', 'copilot/'] as const;
+const COPILOT_SUGGESTION_FETCH_MIN_LIMIT = 30 as const;
+
+const isCopilotAuthorLogin = (login: string) => {
+  const normalized = login.toLowerCase();
+  for (const marker of COPILOT_AUTHOR_MARKERS) {
+    if (normalized.includes(marker)) {
+      return true;
+    }
+  }
+  return false;
 };
 
 const ghAvailabilityState = {
@@ -55,10 +67,10 @@ export function isGhInstalled(args: { cwd: string }) {
   return ghAvailabilityState.available;
 }
 
-export function getUserPullRequests(args: { repo: RepoInfo; limit: number }) {
+function runGhPullRequestList(args: { repo: RepoInfo; limit: number; extraArgs: string[] }) {
   const repo = args.repo;
   const limit = args.limit;
-
+  const extraArgs = args.extraArgs;
   const jsonFields = PR_JSON_FIELDS.join(',');
   const commandArgs = [
     'pr',
@@ -67,13 +79,12 @@ export function getUserPullRequests(args: { repo: RepoInfo; limit: number }) {
     repo.fullName,
     '--state',
     'open',
-    '--author',
-    '@me',
     '--limit',
     `${limit}`,
     '--json',
     jsonFields,
-  ] as const;
+    ...extraArgs,
+  ];
 
   try {
     const result = spawnSync('gh', commandArgs, {
@@ -98,9 +109,9 @@ export function getUserPullRequests(args: { repo: RepoInfo; limit: number }) {
     const parsedPrs: PullRequestSummary[] = [];
 
     for (const entry of parsed) {
-      const result = pullRequestSummarySchema.safeParse(entry);
-      if (result.success) {
-        parsedPrs.push(result.data);
+      const validation = pullRequestSummarySchema.safeParse(entry);
+      if (validation.success) {
+        parsedPrs.push(validation.data);
       }
     }
 
@@ -110,32 +121,133 @@ export function getUserPullRequests(args: { repo: RepoInfo; limit: number }) {
   }
 }
 
-export function getWorktreeSuggestions(args: {
-  repo: RepoInfo;
-  existingBranches: Set<string>;
-  limit: number;
-}) {
-  const suggestions: WorktreeSuggestion[] = [];
-  const pullRequests = getUserPullRequests({ repo: args.repo, limit: args.limit });
+export function getUserPullRequests(args: { repo: RepoInfo; limit: number }) {
+  return runGhPullRequestList({
+    repo: args.repo,
+    limit: args.limit,
+    extraArgs: ['--author', '@me'],
+  });
+}
+
+export function getAssignedCopilotPullRequests(args: { repo: RepoInfo; limit: number }) {
+  const pullRequests = runGhPullRequestList({
+    repo: args.repo,
+    limit: Math.max(args.limit, COPILOT_SUGGESTION_FETCH_MIN_LIMIT),
+    extraArgs: ['--assignee', '@me'],
+  });
 
   if (pullRequests === null) {
     return null;
   }
 
+  const filtered: PullRequestSummary[] = [];
+
   for (const pr of pullRequests) {
-    if (args.existingBranches.has(pr.headRefName)) {
+    const authorLogin = pr.author?.login;
+    if (!authorLogin) {
       continue;
     }
 
+    if (!isCopilotAuthorLogin(authorLogin)) {
+      continue;
+    }
+
+    filtered.push(pr);
+  }
+
+  if (filtered.length === 0) {
+    return [];
+  }
+
+  return filtered.slice(0, Math.max(args.limit, 0));
+}
+
+export function getWorktreeSuggestions(args: {
+  repo: RepoInfo;
+  existingBranches: Set<string>;
+  limit: number;
+}) {
+  const existingBranches = args.existingBranches;
+  const limit = args.limit;
+  const seenBranches = new Set<string>(existingBranches);
+  const suggestions: WorktreeSuggestion[] = [];
+  const authoredPullRequests = getUserPullRequests({ repo: args.repo, limit });
+  const assignedPullRequests = getAssignedCopilotPullRequests({ repo: args.repo, limit });
+
+  if (authoredPullRequests === null && assignedPullRequests === null) {
+    return null;
+  }
+
+  const addSuggestion = (additionArgs: { pr: PullRequestSummary; copilotAssigned: boolean }) => {
+    const pr = additionArgs.pr;
+    const branch = pr.headRefName;
+
+    if (seenBranches.has(branch)) {
+      return;
+    }
+
+    seenBranches.add(branch);
     suggestions.push({
-      branch: pr.headRefName,
+      branch,
       number: pr.number,
       title: pr.title,
       url: pr.url,
       isDraft: pr.isDraft,
       updatedAt: pr.updatedAt,
+      copilotAssigned: additionArgs.copilotAssigned,
     });
+  };
+
+  if (authoredPullRequests !== null) {
+    for (const pr of authoredPullRequests) {
+      addSuggestion({ pr, copilotAssigned: false });
+    }
   }
 
-  return suggestions;
+  if (assignedPullRequests !== null) {
+    for (const pr of assignedPullRequests) {
+      addSuggestion({ pr, copilotAssigned: true });
+    }
+  }
+
+  if (suggestions.length === 0) {
+    return [];
+  }
+
+  const sortByRecency = (list: WorktreeSuggestion[]) => {
+    const toTimestamp = (value?: string) => {
+      if (!value) {
+        return 0;
+      }
+
+      const parsed = Date.parse(value);
+      return Number.isNaN(parsed) ? 0 : parsed;
+    };
+
+    list.sort((left, right) => {
+      const rightTimestamp = toTimestamp(right.updatedAt);
+      const leftTimestamp = toTimestamp(left.updatedAt);
+
+      if (rightTimestamp !== leftTimestamp) {
+        return rightTimestamp - leftTimestamp;
+      }
+
+      return left.branch.localeCompare(right.branch);
+    });
+  };
+
+  const authoredSuggestions = suggestions.filter(suggestion => !suggestion.copilotAssigned);
+  const copilotSuggestions = suggestions.filter(suggestion => suggestion.copilotAssigned);
+
+  sortByRecency(authoredSuggestions);
+  sortByRecency(copilotSuggestions);
+
+  if (authoredSuggestions.length >= limit) {
+    return authoredSuggestions.slice(0, limit);
+  }
+
+  const remaining = Math.max(limit - authoredSuggestions.length, 0);
+  const combined = [...authoredSuggestions, ...copilotSuggestions.slice(0, remaining)];
+
+  return combined;
 }

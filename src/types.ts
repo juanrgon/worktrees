@@ -3,6 +3,7 @@ export type Config = {
   worktreesRoot?: string;
   autoOpen?: boolean;
   repoName?: string;
+  suggestionLimit?: number;
 };
 
 export type RepoInfo = {

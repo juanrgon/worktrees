@@ -3,6 +3,7 @@ import { loadConfig, expandPath } from '../config.ts';
 import { listWorktrees, getWorktreeStatus } from '../git.ts';
 import { error, info, warning, colorize, formatStatus } from '../ui/theme.ts';
 import { resolveWorktreeSuggestions, printWorktreeSuggestions } from '../ui/suggestions.ts';
+import { SUGGESTION_LIMIT_DEFAULT } from '../suggestion-limit.ts';
 import type { Worktree } from '../types.ts';
 
 export function listCommand() {
@@ -55,7 +56,7 @@ export function listCommand() {
   const suggestions = resolveWorktreeSuggestions({
     repo: repoInfo,
     existingBranches: localBranches,
-    limit: 20,
+    limit: config.suggestionLimit ?? SUGGESTION_LIMIT_DEFAULT,
   });
 
   switch (suggestions.status) {

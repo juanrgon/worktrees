@@ -12,8 +12,9 @@ import {
   fetchRemoteBranch,
 } from '../git.ts';
 import { error, info, warning, success, colorize } from '../ui/theme.ts';
-import { resolveWorktreeSuggestions, printWorktreeSuggestions } from '../ui/suggestions.ts';
+import { resolveWorktreeSuggestions } from '../ui/suggestions.ts';
 import { pickWorktree } from '../ui/picker.ts';
+import { SUGGESTION_LIMIT_DEFAULT } from '../suggestion-limit.ts';
 import type { Worktree, Config, RepoInfo } from '../types.ts';
 import type { WorktreeSuggestion } from '../github.ts';
 
@@ -51,10 +52,12 @@ export async function openCommand(args: { open: boolean }) {
   });
 
   const localBranches = new Set(worktrees.map(wt => wt.branch));
+  const suggestionLimit = config.suggestionLimit ?? SUGGESTION_LIMIT_DEFAULT;
+
   const suggestionResult = resolveWorktreeSuggestions({
     repo: repoInfo,
     existingBranches: localBranches,
-    limit: 20,
+    limit: suggestionLimit,
   });
 
   let suggestions: WorktreeSuggestion[] = [];
@@ -76,7 +79,6 @@ export async function openCommand(args: { open: boolean }) {
       break;
     case 'ok':
       suggestions = suggestionResult.suggestions;
-      printWorktreeSuggestions({ suggestions });
       break;
   }
 

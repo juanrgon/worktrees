@@ -1,5 +1,6 @@
 import { colorize } from './theme.ts';
 import { isGhInstalled, getWorktreeSuggestions } from '../github.ts';
+import { normalizeSuggestionLimit } from '../suggestion-limit.ts';
 import type { RepoInfo } from '../types.ts';
 import type { WorktreeSuggestion } from '../github.ts';
 
@@ -17,12 +18,19 @@ export function printWorktreeSuggestions(args: { suggestions: WorktreeSuggestion
     const branchLabel = colorize({ text: suggestion.branch, color: branchColor });
     const draftLabel = suggestion.isDraft ? colorize({ text: ' (draft)', color: 'dim' }) : '';
     const prNumber = colorize({ text: `#${suggestion.number}`, color: 'cyan' });
+    const copilotLabel = suggestion.copilotAssigned
+      ? colorize({ text: ' [Copilot assigned]', color: 'dim' })
+      : '';
     const titleSuffix = suggestion.title ? ` - ${suggestion.title}` : '';
 
-    console.log(`  ${colorize({ text: '*', color: 'dim' })} ${branchLabel}${draftLabel} ${prNumber}${titleSuffix}`);
+    console.log(
+      `  ${colorize({ text: '*', color: 'dim' })} ${branchLabel}${draftLabel} ${prNumber}${copilotLabel}${titleSuffix}`,
+    );
 
     if (suggestion.url) {
       console.log(`    ${colorize({ text: suggestion.url, color: 'dim' })}`);
+    } else if (suggestion.copilotAssigned) {
+      console.log(`    ${colorize({ text: 'Assigned to you by GitHub Copilot', color: 'dim' })}`);
     }
   }
 
@@ -47,6 +55,7 @@ export function resolveWorktreeSuggestions(args: {
   existingBranches: Set<string>;
   limit: number;
 }): SuggestionResolution {
+  const limit = normalizeSuggestionLimit(args.limit);
   const ghAvailable = isGhInstalled({ cwd: args.repo.root });
 
   if (!ghAvailable) {
@@ -56,7 +65,7 @@ export function resolveWorktreeSuggestions(args: {
   const suggestions = getWorktreeSuggestions({
     repo: args.repo,
     existingBranches: args.existingBranches,
-    limit: args.limit,
+    limit,
   });
 
   if (suggestions === null) {

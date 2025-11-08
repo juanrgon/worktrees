@@ -2,15 +2,17 @@ import { readFileSync, existsSync } from 'fs';
 import { join, dirname } from 'path';
 import { homedir } from 'os';
 import { parse as parseToml } from '@iarna/toml';
+import { SUGGESTION_LIMIT_DEFAULT, normalizeSuggestionLimit } from './suggestion-limit.ts';
 import type { Config, ResolvedConfig, ConfigSource } from './types.ts';
 
-export const CONFIG_KEYS = ['editor', 'worktreesRoot', 'autoOpen', 'repoName'] as const;
+export const CONFIG_KEYS = ['editor', 'worktreesRoot', 'autoOpen', 'repoName', 'suggestionLimit'] as const;
 type ConfigKey = (typeof CONFIG_KEYS)[number];
 
 const DEFAULT_CONFIG = {
   editor: process.env.EDITOR || process.env.VISUAL || 'code',
   worktreesRoot: join(homedir(), 'worktrees'),
   autoOpen: false,
+  suggestionLimit: SUGGESTION_LIMIT_DEFAULT,
 } satisfies Config;
 
 
@@ -22,6 +24,7 @@ export function loadConfig(args: { cwd: string }) {
     worktreesRoot: resolved.worktreesRoot,
     autoOpen: resolved.autoOpen,
     repoName: resolved.repoName,
+    suggestionLimit: resolved.suggestionLimit,
   };
 }
 
@@ -96,6 +99,10 @@ export function resolveConfig(args: { cwd: string }) {
       merged.repoName = config.repoName;
       sources.repoName = source;
     }
+    if (config.suggestionLimit !== undefined) {
+      merged.suggestionLimit = config.suggestionLimit;
+      sources.suggestionLimit = source;
+    }
   }
 
   const resolvedConfig = {
@@ -118,6 +125,10 @@ function loadTomlFile(args: { path: string }) {
         typeof parsed.worktreesRoot === 'string' ? parsed.worktreesRoot : undefined,
       autoOpen: typeof parsed.autoOpen === 'boolean' ? parsed.autoOpen : undefined,
       repoName: typeof parsed.repoName === 'string' ? parsed.repoName : undefined,
+      suggestionLimit:
+        typeof parsed.suggestionLimit === 'number'
+          ? normalizeSuggestionLimit(parsed.suggestionLimit)
+          : undefined,
     };
   } catch (error) {
     return {};
