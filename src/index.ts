@@ -37,7 +37,7 @@ export async function main(args: { argv: string[] }) {
 
       case 'list':
       case 'ls':
-        listCommand();
+        await listCommand();
         break;
 
       case 'remove':

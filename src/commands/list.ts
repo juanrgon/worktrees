@@ -1,12 +1,12 @@
 import { detectRepoInfo } from '../repo.ts';
 import { loadConfig, expandPath } from '../config.ts';
 import { listWorktrees, getWorktreeStatus } from '../git.ts';
-import { error, info, warning, colorize, formatStatus, loading } from '../ui/theme.ts';
+import { error, info, warning, colorize, formatStatus, runWithLoading } from '../ui/theme.ts';
 import { resolveWorktreeSuggestions, printWorktreeSuggestions } from '../ui/suggestions.ts';
 import { SUGGESTION_LIMIT_DEFAULT } from '../suggestion-limit.ts';
 import type { Worktree } from '../types.ts';
 
-export function listCommand() {
+export async function listCommand() {
   const repoInfo = detectRepoInfo({ cwd: process.cwd() });
   if (!repoInfo) {
     error({ message: 'Not in a git repository' });
@@ -17,8 +17,10 @@ export function listCommand() {
   const worktreesRoot = expandPath({ path: config.worktreesRoot || '~/worktrees' });
 
   // Get all worktrees
-  loading({ message: 'Loading worktrees…' });
-  const gitWorktrees = listWorktrees({ repoRoot: repoInfo.root });
+  const gitWorktrees = await runWithLoading({
+    message: 'Loading worktrees…',
+    task: () => listWorktrees({ repoRoot: repoInfo.root }),
+  });
 
   const worktrees: Worktree[] = gitWorktrees.map(wt => {
     const status = getWorktreeStatus({ path: wt.path });
@@ -54,14 +56,17 @@ export function listCommand() {
   }
 
   const localBranches = new Set(worktrees.map(wt => wt.branch));
-  loading({ message: 'Gathering pull request suggestions…' });
-  const suggestions = resolveWorktreeSuggestions({
-    repo: repoInfo,
-    existingBranches: localBranches,
-    limit: config.suggestionLimit ?? SUGGESTION_LIMIT_DEFAULT,
+  const suggestionResult = await runWithLoading({
+    message: 'Gathering pull request suggestions…',
+    task: () =>
+      resolveWorktreeSuggestions({
+        repo: repoInfo,
+        existingBranches: localBranches,
+        limit: config.suggestionLimit ?? SUGGESTION_LIMIT_DEFAULT,
+      }),
   });
 
-  switch (suggestions.status) {
+  switch (suggestionResult.status) {
     case 'unavailable':
       info({ message: 'GitHub CLI not detected; skipping remote pull request lookup.' });
       console.log();
@@ -77,7 +82,7 @@ export function listCommand() {
       }
       break;
     case 'ok':
-      printWorktreeSuggestions({ suggestions: suggestions.suggestions });
+      printWorktreeSuggestions({ suggestions: suggestionResult.suggestions });
       break;
   }
 }
