@@ -1,7 +1,7 @@
 import { detectRepoInfo } from '../repo.ts';
 import { loadConfig, expandPath } from '../config.ts';
 import { listWorktrees, getWorktreeStatus } from '../git.ts';
-import { error, info, warning, colorize, formatStatus } from '../ui/theme.ts';
+import { error, info, warning, colorize, formatStatus, loading } from '../ui/theme.ts';
 import { resolveWorktreeSuggestions, printWorktreeSuggestions } from '../ui/suggestions.ts';
 import { SUGGESTION_LIMIT_DEFAULT } from '../suggestion-limit.ts';
 import type { Worktree } from '../types.ts';
@@ -17,6 +17,7 @@ export function listCommand() {
   const worktreesRoot = expandPath({ path: config.worktreesRoot || '~/worktrees' });
 
   // Get all worktrees
+  loading({ message: 'Loading worktrees…' });
   const gitWorktrees = listWorktrees({ repoRoot: repoInfo.root });
 
   const worktrees: Worktree[] = gitWorktrees.map(wt => {
@@ -53,6 +54,7 @@ export function listCommand() {
   }
 
   const localBranches = new Set(worktrees.map(wt => wt.branch));
+  loading({ message: 'Gathering pull request suggestions…' });
   const suggestions = resolveWorktreeSuggestions({
     repo: repoInfo,
     existingBranches: localBranches,

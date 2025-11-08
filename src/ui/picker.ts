@@ -5,8 +5,8 @@ import type { Worktree } from '../types.ts';
 import type { WorktreeSuggestion } from '../github.ts';
 import { colorize, formatStatus, formatPath } from './theme.ts';
 
-const PICKER_PATH_MAX_LENGTH = 40 as const;
-const MAX_VISIBLE_ITEMS = 20 as const;
+const MAX_VISIBLE_ITEMS = 12;
+const PICKER_PATH_MAX_LENGTH = 64;
 
 export type PickerOptions = {
   title?: string;
@@ -250,6 +250,7 @@ async function runLivePicker(args: { items: PickerItem[]; options: PickerOptions
   const stdin = process.stdin as NodeJS.ReadStream & { isRaw?: boolean };
   const stdout = process.stdout;
   const originalRawMode = stdin.isRaw === true;
+  const restoreCursor = () => stdout.write('\x1b[?25h');
 
   return new Promise<WorktreeSelection | null>(resolve => {
     let searchQuery = '';
@@ -336,13 +337,11 @@ async function runLivePicker(args: { items: PickerItem[]; options: PickerOptions
           lines.push(colorize({ text: '⋮', color: 'dim' }));
         }
       }
-
       lines.push('');
       const totalLabel = `${filteredItems.length}/${args.items.length} result${filteredItems.length === 1 ? '' : 's'}`;
       lines.push(colorize({ text: totalLabel, color: 'dim' }));
 
-      stdout.write(lines.map(line => `${line}
-`).join(''));
+      stdout.write(lines.map(line => `${line}\n`).join(''));
       lastRenderLineCount = lines.length;
       cursorTo(stdout, 0);
     };
@@ -351,7 +350,7 @@ async function runLivePicker(args: { items: PickerItem[]; options: PickerOptions
       clearPreviousLines();
       clearLine(stdout, 0);
       cursorTo(stdout, 0);
-      stdout.write('\x1b[?25h');
+      restoreCursor();
 
       if (typeof stdin.setRawMode === 'function') {
         stdin.setRawMode(originalRawMode);
@@ -443,17 +442,27 @@ async function runLivePicker(args: { items: PickerItem[]; options: PickerOptions
       }
     };
 
-    if (typeof stdin.setRawMode === 'function') {
-      stdin.setRawMode(true);
+    try {
+      if (typeof stdin.setRawMode === 'function') {
+        stdin.setRawMode(true);
+      }
+      stdin.setEncoding('utf8');
+      stdin.resume();
+      stdout.write('\x1b[?25l');
+
+      updateFilteredItems();
+      render();
+
+      stdin.on('data', onData);
+    } catch (error) {
+      restoreCursor();
+      if (typeof stdin.setRawMode === 'function') {
+        stdin.setRawMode(originalRawMode);
+      }
+      stdin.removeListener('data', onData);
+      stdin.pause();
+      resolve(null);
     }
-    stdin.setEncoding('utf8');
-    stdin.resume();
-    stdout.write('\x1b[?25l');
-
-    updateFilteredItems();
-    render();
-
-    stdin.on('data', onData);
   });
 }
 

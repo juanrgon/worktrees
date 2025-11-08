@@ -45,6 +45,11 @@ export function info(args: { message: string }) {
   log({ message: `ℹ ${message}`, color: 'blue' });
 }
 
+export function loading(args: { message: string }) {
+  const message = args.message;
+  log({ message: `… ${message}`, color: 'magenta' });
+}
+
 export function warning(args: { message: string }) {
   const message = args.message;
   log({ message: `⚠ ${message}`, color: 'yellow' });

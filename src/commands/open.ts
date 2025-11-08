@@ -11,7 +11,7 @@ import {
   createWorktreeFromRemote,
   fetchRemoteBranch,
 } from '../git.ts';
-import { error, info, warning, success, colorize } from '../ui/theme.ts';
+import { error, info, warning, success, colorize, loading } from '../ui/theme.ts';
 import { resolveWorktreeSuggestions } from '../ui/suggestions.ts';
 import { pickWorktree } from '../ui/picker.ts';
 import { SUGGESTION_LIMIT_DEFAULT } from '../suggestion-limit.ts';
@@ -40,6 +40,7 @@ export async function openCommand(args: { open: boolean }) {
   const shouldOpen = openRequested || Boolean(config.autoOpen);
 
   // Get all worktrees
+  loading({ message: 'Loading worktrees…' });
   const gitWorktrees = listWorktrees({ repoRoot: repoInfo.root });
   const worktrees: Worktree[] = gitWorktrees.map(wt => {
     const status = getWorktreeStatus({ path: wt.path });
@@ -54,6 +55,7 @@ export async function openCommand(args: { open: boolean }) {
   const localBranches = new Set(worktrees.map(wt => wt.branch));
   const suggestionLimit = config.suggestionLimit ?? SUGGESTION_LIMIT_DEFAULT;
 
+  loading({ message: 'Gathering pull request suggestions…' });
   const suggestionResult = resolveWorktreeSuggestions({
     repo: repoInfo,
     existingBranches: localBranches,
