@@ -156,8 +156,15 @@ export function createWorktreeFromRemote(args: {
   });
 }
 
-export function removeWorktree(args: { repoRoot: string; path: string }) {
-  exec({ command: `git worktree remove "${args.path}"`, cwd: args.repoRoot, silent: false });
+export function removeWorktree(args: { path: string }) {
+  const worktreePath = args.path;
+  execQuiet({ command: `git worktree remove --force ${worktreePath}`, cwd: process.cwd() });
+}
+
+export function moveWorktree(args: { oldPath: string; newPath: string }) {
+  const oldPath = args.oldPath;
+  const newPath = args.newPath;
+  execQuiet({ command: `git worktree move ${oldPath} ${newPath}`, cwd: process.cwd() });
 }
 
 export function branchExists(args: { repoRoot: string; branch: string }) {

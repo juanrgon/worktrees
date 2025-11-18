@@ -1,4 +1,4 @@
-import { join } from 'path';
+import { join, dirname } from 'path';
 import { mkdirSync, existsSync } from 'fs';
 import { detectRepoInfo } from '../repo.ts';
 import { loadConfig, expandPath } from '../config.ts';
@@ -49,8 +49,12 @@ export async function newCommand(args: { branch: string; open: boolean }) {
     useExisting = true;
   }
 
-  // Construct worktree path: ~/worktrees/{branch}/{org}/{repo}
-  const worktreePath = join(worktreesRoot, branch, repoInfo.org, repoInfo.name);
+  // Construct worktree path
+  const directoryStructure = config.directoryStructure || 'branch-first';
+  const worktreePath =
+    directoryStructure === 'repo-first'
+      ? join(worktreesRoot, repoInfo.org, repoInfo.name, branch)
+      : join(worktreesRoot, branch, repoInfo.org, repoInfo.name);
 
   if (existsSync(worktreePath)) {
     error({ message: `Worktree already exists: ${worktreePath}` });
@@ -62,7 +66,7 @@ export async function newCommand(args: { branch: string; open: boolean }) {
   }
 
   // Create parent directories
-  mkdirSync(join(worktreesRoot, branch, repoInfo.org), { recursive: true });
+  mkdirSync(dirname(worktreePath), { recursive: true });
 
   // Create worktree
   info({ message: `Creating worktree for branch '${branch}'...` });

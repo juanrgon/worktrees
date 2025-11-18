@@ -1,4 +1,4 @@
-import { join } from 'path';
+import { join, dirname } from 'path';
 import { existsSync, mkdirSync } from 'fs';
 import { spawn } from 'child_process';
 import { detectRepoInfo } from '../repo.ts';
@@ -149,7 +149,12 @@ async function handleSuggestionSelection(args: {
   const config = args.config;
   const worktreesRoot = args.worktreesRoot;
   const shouldOpen = args.shouldOpen;
-  const worktreePath = join(worktreesRoot, branch, repoInfo.org, repoInfo.name);
+  
+  const directoryStructure = config.directoryStructure || 'branch-first';
+  const worktreePath =
+    directoryStructure === 'repo-first'
+      ? join(worktreesRoot, repoInfo.org, repoInfo.name, branch)
+      : join(worktreesRoot, branch, repoInfo.org, repoInfo.name);
 
   if (existsSync(worktreePath)) {
     error({ message: `Worktree already exists: ${worktreePath}` });
@@ -160,7 +165,7 @@ async function handleSuggestionSelection(args: {
     return;
   }
 
-  mkdirSync(join(worktreesRoot, branch, repoInfo.org), { recursive: true });
+  mkdirSync(dirname(worktreePath), { recursive: true });
 
   try {
     const branchAlreadyExists = branchExists({ repoRoot: repoInfo.root, branch });

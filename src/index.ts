@@ -5,6 +5,7 @@ import { removeCommand } from './commands/remove.ts';
 import { cleanupCommand } from './commands/cleanup.ts';
 import { statusCommand } from './commands/status.ts';
 import { configCommand } from './commands/config.ts';
+import { migrateCommand } from './commands/migrate.ts';
 import { error, colorize } from './ui/theme.ts';
 
 export async function main(args: { argv: string[] }) {
@@ -63,6 +64,10 @@ export async function main(args: { argv: string[] }) {
         configCommand({ values: cleanArgs });
         break;
 
+      case 'migrate':
+        await migrateCommand();
+        break;
+
       case 'help':
       case '--help':
       case '-h':
@@ -104,6 +109,7 @@ function showHelp() {
   console.log('  wt list                  List all worktrees');
   console.log('  wt remove <branch>       Remove a worktree');
   console.log('  wt cleanup               Remove worktrees for merged/deleted branches');
+  console.log('  wt migrate               Migrate worktrees to new directory structure');
   console.log('  wt status                Show status of all worktrees');
   console.log('  wt config <action>       Manage configuration');
   console.log('  wt help                  Show this help');
@@ -123,6 +129,7 @@ function showHelp() {
   console.log('  worktreesRoot   Root directory for worktrees (default: ~/worktrees)');
   console.log('  autoOpen        Auto-open worktrees in editor (default: false)');
   console.log('  repoName        Override repo name (e.g., "github/copilot-api")');
+  console.log('  directoryStructure  Directory structure (branch-first | repo-first)');
   console.log();
   console.log(colorize({ text: 'Examples:', color: 'cyan' }));
   console.log('  wt new feature-x --open');

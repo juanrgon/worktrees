@@ -90,6 +90,11 @@ function setConfig(args: { key: string; value: string; global: boolean }) {
   let parsedValue: string | boolean = args.value;
   if (args.key === 'autoOpen') {
     parsedValue = args.value.toLowerCase() === 'true';
+  } else if (args.key === 'directoryStructure') {
+    if (args.value !== 'branch-first' && args.value !== 'repo-first') {
+      error({ message: 'Invalid value for directoryStructure. Must be "branch-first" or "repo-first"' });
+      process.exit(1);
+    }
   }
 
   const tomlContent = buildTomlContent({ configPath, key: args.key, value: parsedValue });

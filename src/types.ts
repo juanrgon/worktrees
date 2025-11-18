@@ -4,6 +4,7 @@ export type Config = {
   autoOpen?: boolean;
   repoName?: string;
   suggestionLimit?: number;
+  directoryStructure?: 'branch-first' | 'repo-first';
 };
 
 export type RepoInfo = {
