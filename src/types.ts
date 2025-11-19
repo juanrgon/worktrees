@@ -5,6 +5,7 @@ export type Config = {
   repoName?: string;
   suggestionLimit?: number;
   directoryStructure?: 'branch-first' | 'repo-first';
+  copyFiles?: string[];
 };
 
 export type RepoInfo = {

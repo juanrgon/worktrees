@@ -5,7 +5,7 @@ import { parse as parseToml } from '@iarna/toml';
 import { SUGGESTION_LIMIT_DEFAULT, normalizeSuggestionLimit } from './suggestion-limit.ts';
 import type { Config, ResolvedConfig, ConfigSource } from './types.ts';
 
-export const CONFIG_KEYS = ['editor', 'worktreesRoot', 'autoOpen', 'repoName', 'suggestionLimit', 'directoryStructure'] as const;
+export const CONFIG_KEYS = ['editor', 'worktreesRoot', 'autoOpen', 'repoName', 'suggestionLimit', 'directoryStructure', 'copyFiles'] as const;
 type ConfigKey = (typeof CONFIG_KEYS)[number];
 
 const DEFAULT_CONFIG = {
@@ -14,6 +14,7 @@ const DEFAULT_CONFIG = {
   autoOpen: false,
   suggestionLimit: SUGGESTION_LIMIT_DEFAULT,
   directoryStructure: 'branch-first',
+  copyFiles: [],
 } satisfies Config;
 
 
@@ -27,6 +28,7 @@ export function loadConfig(args: { cwd: string }) {
     repoName: resolved.repoName,
     suggestionLimit: resolved.suggestionLimit,
     directoryStructure: resolved.directoryStructure,
+    copyFiles: resolved.copyFiles,
   };
 }
 
@@ -109,6 +111,10 @@ export function resolveConfig(args: { cwd: string }) {
       merged.directoryStructure = config.directoryStructure;
       sources.directoryStructure = source;
     }
+    if (config.copyFiles !== undefined) {
+      merged.copyFiles = config.copyFiles;
+      sources.copyFiles = source;
+    }
   }
 
   const resolvedConfig = {
@@ -138,6 +144,10 @@ function loadTomlFile(args: { path: string }) {
       directoryStructure:
         parsed.directoryStructure === 'branch-first' || parsed.directoryStructure === 'repo-first'
           ? (parsed.directoryStructure as 'branch-first' | 'repo-first')
+          : undefined,
+      copyFiles:
+        Array.isArray(parsed.copyFiles) && parsed.copyFiles.every((item: unknown) => typeof item === 'string')
+          ? (parsed.copyFiles as string[])
           : undefined,
     };
   } catch (error) {

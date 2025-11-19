@@ -1,5 +1,5 @@
 import { join, dirname } from 'path';
-import { mkdirSync, existsSync } from 'fs';
+import { mkdirSync, existsSync, copyFileSync } from 'fs';
 import { detectRepoInfo } from '../repo.ts';
 import { loadConfig, expandPath } from '../config.ts';
 import { branchExists, createWorktree } from '../git.ts';
@@ -75,6 +75,30 @@ export async function newCommand(args: { branch: string; open: boolean }) {
     success({ message: 'Worktree created!' });
     console.log(`📂 ${colorize({ text: worktreePath, color: 'cyan' })}`);
     console.log();
+
+    // Copy configured files
+    if (config.copyFiles && config.copyFiles.length > 0) {
+      info({ message: 'Copying configured files...' });
+      for (const file of config.copyFiles) {
+        const sourcePath = join(repoInfo.root, file);
+        const targetPath = join(worktreePath, file);
+
+        if (existsSync(sourcePath)) {
+          try {
+            // Ensure target directory exists
+            mkdirSync(dirname(targetPath), { recursive: true });
+            copyFileSync(sourcePath, targetPath);
+            console.log(`  • Copied ${file}`);
+          } catch (err) {
+            const message = err instanceof Error ? err.message : String(err);
+            console.log(`  • Failed to copy ${file}: ${message}`);
+          }
+        } else {
+          console.log(`  • Skipped ${file} (not found in source)`);
+        }
+      }
+      console.log();
+    }
 
     // Handle --open or autoOpen
     const shouldOpen = openRequested || config.autoOpen;
