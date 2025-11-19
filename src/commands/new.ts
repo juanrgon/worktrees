@@ -1,5 +1,6 @@
 import { join, dirname } from 'path';
 import { mkdirSync, existsSync, copyFileSync } from 'fs';
+import glob from 'fast-glob';
 import { detectRepoInfo } from '../repo.ts';
 import { loadConfig, expandPath } from '../config.ts';
 import { branchExists, createWorktree } from '../git.ts';
@@ -79,22 +80,29 @@ export async function newCommand(args: { branch: string; open: boolean }) {
     // Copy configured files
     if (config.copyFiles && config.copyFiles.length > 0) {
       info({ message: 'Copying configured files...' });
-      for (const file of config.copyFiles) {
+
+      const filesToCopy = await glob(config.copyFiles, {
+        cwd: repoInfo.root,
+        dot: true,
+        onlyFiles: true,
+      });
+
+      if (filesToCopy.length === 0) {
+        console.log('  • No files matched the configured patterns.');
+      }
+
+      for (const file of filesToCopy) {
         const sourcePath = join(repoInfo.root, file);
         const targetPath = join(worktreePath, file);
 
-        if (existsSync(sourcePath)) {
-          try {
-            // Ensure target directory exists
-            mkdirSync(dirname(targetPath), { recursive: true });
-            copyFileSync(sourcePath, targetPath);
-            console.log(`  • Copied ${file}`);
-          } catch (err) {
-            const message = err instanceof Error ? err.message : String(err);
-            console.log(`  • Failed to copy ${file}: ${message}`);
-          }
-        } else {
-          console.log(`  • Skipped ${file} (not found in source)`);
+        try {
+          // Ensure target directory exists
+          mkdirSync(dirname(targetPath), { recursive: true });
+          copyFileSync(sourcePath, targetPath);
+          console.log(`  • Copied ${file}`);
+        } catch (err) {
+          const message = err instanceof Error ? err.message : String(err);
+          console.log(`  • Failed to copy ${file}: ${message}`);
         }
       }
       console.log();

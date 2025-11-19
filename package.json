@@ -22,6 +22,7 @@
   "dependencies": {
     "@clack/prompts": "^0.7.0",
     "@iarna/toml": "^2.2.5",
+    "fast-glob": "^3.3.3",
     "fuzzysort": "^3.0.2",
     "zod": "^3.25.76"
   },
