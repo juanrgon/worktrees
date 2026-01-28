@@ -83,7 +83,7 @@ export async function cleanupCommand() {
   let removed = 0;
   for (const wt of branchesToRemove) {
     try {
-      removeWorktree({ path: wt.path });
+      removeWorktree({ repoRoot: repoInfo.root, path: wt.path });
       info({ message: `Removed: ${wt.branch}` });
       removed++;
     } catch (unknownError) {

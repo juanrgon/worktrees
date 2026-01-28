@@ -53,7 +53,7 @@ export async function removeCommand(args: { branch: string }) {
 
   // Remove worktree
   try {
-    removeWorktree({ path: worktree.path });
+    removeWorktree({ repoRoot: repoInfo.root, path: worktree.path });
     success({ message: `Worktree removed: ${branchArg}` });
   } catch (unknownError) {
     const message = unknownError instanceof Error ? unknownError.message : 'Unknown error';

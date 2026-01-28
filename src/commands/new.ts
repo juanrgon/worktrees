@@ -6,9 +6,20 @@ import { loadConfig, expandPath } from '../config.ts';
 import { branchExists, createWorktree } from '../git.ts';
 import { error, success, info, colorize } from '../ui/theme.ts';
 import { handleExistingBranch } from '../ui/picker.ts';
+import { spawn } from 'child_process';
 
-export async function newCommand(args: { branch: string }) {
+function parseEditorCommand(args: { editor: string }) {
+  const parts = args.editor.trim().split(/\s+/);
+  return {
+    command: parts[0] || 'code',
+    args: parts.slice(1),
+  };
+}
+
+export async function newCommand(args: { branch: string; open: boolean }) {
+  // All parameters required
   const initialBranch = args.branch;
+  const openRequested = args.open;
   const repoInfo = detectRepoInfo({ cwd: process.cwd() });
   if (!repoInfo) {
     error({ message: 'Not in a git repository' });
@@ -97,8 +108,18 @@ export async function newCommand(args: { branch: string }) {
       console.log();
     }
 
-    // Output path for shell integration (shell wrapper can parse this to cd)
-    console.log(`__CD__:${worktreePath}`);
+    // Handle --open or autoOpen
+    const shouldOpen = openRequested || config.autoOpen;
+    if (shouldOpen && config.editor) {
+      info({ message: `Opening in ${config.editor}...` });
+      const editorCommand = parseEditorCommand({ editor: config.editor });
+      spawn(editorCommand.command, [...editorCommand.args, worktreePath], {
+        detached: true,
+        stdio: 'ignore',
+      }).unref();
+    } else {
+      console.log(colorize({ text: `cd ${worktreePath}`, color: 'dim' }));
+    }
   } catch (unknownError) {
     const message = unknownError instanceof Error ? unknownError.message : 'Unknown error';
     error({ message: `Failed to create worktree: ${message}` });
