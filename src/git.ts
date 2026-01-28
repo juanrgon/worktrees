@@ -1,4 +1,8 @@
-import { execSync } from 'child_process';
+import { execSync, exec as execCallback } from 'child_process';
+import { promisify } from 'util';
+import { dirname } from 'path';
+
+const execPromise = promisify(execCallback);
 
 type GitWorktree = {
   path: string;
@@ -35,12 +39,33 @@ export function execQuiet(args: { command: string; cwd: string }) {
   return exec({ command: args.command, cwd: args.cwd, silent: true });
 }
 
+export async function execAsync(args: { command: string; cwd: string; silent?: boolean }) {
+  const { command, cwd, silent } = args;
+  try {
+    const { stdout } = await execPromise(command, { cwd, encoding: 'utf8' });
+    return stdout.trim();
+  } catch (error) {
+    if (silent) {
+      return '';
+    }
+    throw error;
+  }
+}
+
+export async function execQuietAsync(args: { command: string; cwd: string }) {
+  return execAsync({ command: args.command, cwd: args.cwd, silent: true });
+}
+
 export function isGitRepo(args: { cwd: string }) {
   const result = execQuiet({ command: 'git rev-parse --is-inside-work-tree', cwd: args.cwd });
   return result === 'true';
 }
 
 export function getGitRoot(args: { cwd: string }) {
+  const commonDir = execQuiet({ command: 'git rev-parse --path-format=absolute --git-common-dir', cwd: args.cwd });
+  if (commonDir) {
+    return dirname(commonDir);
+  }
   return execQuiet({ command: 'git rev-parse --show-toplevel', cwd: args.cwd });
 }
 
@@ -48,8 +73,17 @@ export function getRemoteUrl(args: { cwd: string }) {
   return execQuiet({ command: 'git remote get-url origin', cwd: args.cwd });
 }
 
+export function getRemotes(args: { cwd: string }) {
+  const output = execQuiet({ command: 'git remote', cwd: args.cwd });
+  return output.split('\n').map(line => line.trim()).filter(line => line.length > 0);
+}
+
 export function getCurrentBranch(args: { cwd: string }) {
   return execQuiet({ command: 'git branch --show-current', cwd: args.cwd });
+}
+
+export async function getCurrentBranchAsync(args: { cwd: string }) {
+  return execQuietAsync({ command: 'git branch --show-current', cwd: args.cwd });
 }
 
 export function listWorktrees(args: { repoRoot: string }) {
@@ -90,20 +124,20 @@ export function listWorktrees(args: { repoRoot: string }) {
   return worktrees;
 }
 
-export function getWorktreeStatus(args: { path: string }) {
+export async function getWorktreeStatusAsync(args: { path: string }) {
   const worktreePath = args.path;
-  const statusOutput = execQuiet({ command: 'git status --porcelain', cwd: worktreePath });
+  const statusOutput = await execQuietAsync({ command: 'git status --porcelain', cwd: worktreePath });
   const lines = statusOutput.split('\n').filter((line): line is string => line.length > 0);
   const modified = lines.filter(line => line.startsWith(' M') || line.startsWith('M ')).length;
   const untracked = lines.filter(line => line.startsWith('??')).length;
   const hasChanges = lines.length > 0;
 
-  const branch = getCurrentBranch({ cwd: worktreePath });
+  const branch = await getCurrentBranchAsync({ cwd: worktreePath });
   if (!branch || branch === '(detached)') {
     return { ahead: 0, behind: 0, hasChanges, modified, untracked };
   }
 
-  const remoteBranch = execQuiet({
+  const remoteBranch = await execQuietAsync({
     command: `git rev-parse --abbrev-ref ${branch}@{upstream} 2>/dev/null`,
     cwd: worktreePath,
   });
@@ -112,7 +146,7 @@ export function getWorktreeStatus(args: { path: string }) {
   let behind = 0;
 
   if (remoteBranch) {
-    const aheadBehind = execQuiet({
+    const aheadBehind = await execQuietAsync({
       command: `git rev-list --left-right --count ${branch}...${remoteBranch}`,
       cwd: worktreePath,
     });

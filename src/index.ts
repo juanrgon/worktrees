@@ -1,4 +1,5 @@
 import { newCommand } from './commands/new.ts';
+import { cloneCommand } from './commands/clone.ts';
 import { openCommand } from './commands/open.ts';
 import { listCommand } from './commands/list.ts';
 import { removeCommand } from './commands/remove.ts';
@@ -6,6 +7,7 @@ import { cleanupCommand } from './commands/cleanup.ts';
 import { statusCommand } from './commands/status.ts';
 import { configCommand } from './commands/config.ts';
 import { migrateCommand } from './commands/migrate.ts';
+import { cdCommand } from './commands/cd.ts';
 import { error, colorize } from './ui/theme.ts';
 
 export async function main(args: { argv: string[] }) {
@@ -25,15 +27,31 @@ export async function main(args: { argv: string[] }) {
       case 'new': {
         const branchArg = cleanArgs[0];
         if (!branchArg) {
-          error({ message: 'Usage: wt new <branch> [--open]' });
+          error({ message: 'Usage: wt new <branch>' });
           process.exit(1);
         }
-        await newCommand({ branch: branchArg, open: hasOpenFlag });
+        await newCommand({ branch: branchArg });
+        break;
+      }
+
+      case 'clone': {
+        const branchArg = cleanArgs[0];
+        if (!branchArg) {
+          error({ message: 'Usage: wt clone <branch> [--open]' });
+          process.exit(1);
+        }
+        await cloneCommand({ branch: branchArg, open: hasOpenFlag });
+        break;
+      }
+
+      case 'cd': {
+        const branchArg = cleanArgs[0];
+        await cdCommand({ branch: branchArg });
         break;
       }
 
       case 'open':
-        await openCommand({ open: true });
+        await openCommand({ open: true, branch: cleanArgs[0] });
         break;
 
       case 'list':
@@ -57,7 +75,7 @@ export async function main(args: { argv: string[] }) {
 
       case 'status':
       case 'st':
-        statusCommand();
+        await statusCommand();
         break;
 
       case 'config':
@@ -104,7 +122,9 @@ function showHelp() {
   console.log();
   console.log(colorize({ text: 'Usage:', color: 'cyan' }));
   console.log('  wt                       Open interactive worktree picker');
-  console.log('  wt new <branch>          Create a new worktree');
+  console.log('  wt new <branch>          Create a new worktree (cd after)');
+  console.log('  wt clone <branch>        Clone a remote branch into a worktree');
+  console.log('  wt cd [branch]           Switch to worktree (fzf picker if no branch)');
   console.log('  wt open                  Open interactive worktree picker');
   console.log('  wt list                  List all worktrees');
   console.log('  wt remove <branch>       Remove a worktree');
@@ -131,8 +151,15 @@ function showHelp() {
   console.log('  repoName        Override repo name (e.g., "github/copilot-api")');
   console.log('  directoryStructure  Directory structure (branch-first | repo-first)');
   console.log();
+  console.log(colorize({ text: 'Shell integration:', color: 'cyan' }));
+  console.log('  Add to ~/.zshrc or ~/.bashrc:');
+  console.log('    source /path/to/wt-cli/wt.sh');
+  console.log('  This enables `wt cd` to change your directory.');
+  console.log();
   console.log(colorize({ text: 'Examples:', color: 'cyan' }));
-  console.log('  wt new feature-x --open');
+  console.log('  wt new feature-x');
+  console.log('  wt cd                    # fzf picker');
+  console.log('  wt cd feature-x          # direct switch');
   console.log('  wt open');
   console.log('  wt list');
   console.log('  wt cleanup');

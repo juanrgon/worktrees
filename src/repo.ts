@@ -11,8 +11,15 @@ export function detectRepoInfo(args: { cwd: string }) {
 
   const root = getGitRoot({ cwd: workingDir });
 
-  // Check for config override first
-  const config = loadConfig({ cwd: workingDir });
+  // Check for config override (try workingDir first, then repo root)
+  let config = loadConfig({ cwd: workingDir });
+  if (!config.repoName && root && root !== workingDir) {
+    const rootConfig = loadConfig({ cwd: root });
+    if (rootConfig.repoName) {
+      config = rootConfig;
+    }
+  }
+
   if (config.repoName) {
     const parts = config.repoName.split("/");
     if (parts.length === 2) {

@@ -1,10 +1,10 @@
 import { detectRepoInfo } from '../repo.ts';
 import { loadConfig, expandPath } from '../config.ts';
-import { listWorktrees, getWorktreeStatus } from '../git.ts';
+import { listWorktrees, getWorktreeStatusAsync } from '../git.ts';
 import { error, info, colorize } from '../ui/theme.ts';
 import type { Worktree } from '../types.ts';
 
-export function statusCommand() {
+export async function statusCommand() {
   const repoInfo = detectRepoInfo({ cwd: process.cwd() });
   if (!repoInfo) {
     error({ message: 'Not in a git repository' });
@@ -16,17 +16,17 @@ export function statusCommand() {
 
   // Get all worktrees
   const gitWorktrees = listWorktrees({ repoRoot: repoInfo.root });
-  const prWorktrees: Worktree[] = gitWorktrees
+  const prWorktrees: Worktree[] = await Promise.all(gitWorktrees
     .filter(wt => wt.path !== repoInfo.root && wt.path.startsWith(worktreesRoot))
-    .map(wt => {
-      const status = getWorktreeStatus({ path: wt.path });
+    .map(async wt => {
+      const status = await getWorktreeStatusAsync({ path: wt.path });
       return {
         path: wt.path,
         branch: wt.branch,
         isMain: false,
         status,
       };
-    });
+    }));
 
   console.log();
   console.log(colorize({ text: `Repository: ${repoInfo.name}`, color: 'bright' }));

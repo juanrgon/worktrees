@@ -1,6 +1,6 @@
 import { detectRepoInfo } from '../repo.ts';
 import { loadConfig, expandPath } from '../config.ts';
-import { listWorktrees, getWorktreeStatus } from '../git.ts';
+import { listWorktrees, getWorktreeStatusAsync } from '../git.ts';
 import { error, info, warning, colorize, formatStatus, runWithLoading } from '../ui/theme.ts';
 import { resolveWorktreeSuggestions, printWorktreeSuggestions } from '../ui/suggestions.ts';
 import { SUGGESTION_LIMIT_DEFAULT } from '../suggestion-limit.ts';
@@ -22,15 +22,15 @@ export async function listCommand() {
     task: () => listWorktrees({ repoRoot: repoInfo.root }),
   });
 
-  const worktrees: Worktree[] = gitWorktrees.map(wt => {
-    const status = getWorktreeStatus({ path: wt.path });
+  const worktrees: Worktree[] = await Promise.all(gitWorktrees.map(async wt => {
+    const status = await getWorktreeStatusAsync({ path: wt.path });
     return {
       path: wt.path,
       branch: wt.branch,
       isMain: wt.path === repoInfo.root,
       status,
     };
-  });
+  }));
 
   console.log();
   console.log(colorize({ text: `Worktrees for ${repoInfo.name}:`, color: 'bright' }));

@@ -1,6 +1,6 @@
 import { detectRepoInfo } from '../repo.ts';
 import { loadConfig, expandPath } from '../config.ts';
-import { listWorktrees, getWorktreeStatus, removeWorktree } from '../git.ts';
+import { listWorktrees, getWorktreeStatusAsync, removeWorktree } from '../git.ts';
 import { error, success, info } from '../ui/theme.ts';
 import { confirmRemove } from '../ui/picker.ts';
 import type { Worktree } from '../types.ts';
@@ -37,7 +37,7 @@ export async function removeCommand(args: { branch: string }) {
   }
 
   // Get status and confirm
-  const status = getWorktreeStatus({ path: worktree.path });
+  const status = await getWorktreeStatusAsync({ path: worktree.path });
   const wt: Worktree = {
     path: worktree.path,
     branch: worktree.branch,
@@ -53,7 +53,7 @@ export async function removeCommand(args: { branch: string }) {
 
   // Remove worktree
   try {
-    removeWorktree({ repoRoot: repoInfo.root, path: worktree.path });
+    removeWorktree({ path: worktree.path });
     success({ message: `Worktree removed: ${branchArg}` });
   } catch (unknownError) {
     const message = unknownError instanceof Error ? unknownError.message : 'Unknown error';

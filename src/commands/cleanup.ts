@@ -2,7 +2,7 @@ import { detectRepoInfo } from '../repo.ts';
 import { loadConfig, expandPath } from '../config.ts';
 import {
   listWorktrees,
-  getWorktreeStatus,
+  getWorktreeStatusAsync,
   getMergedBranches,
   getDeletedRemoteBranches,
   removeWorktree,
@@ -37,17 +37,17 @@ export async function cleanupCommand() {
   const gitWorktrees = listWorktrees({ repoRoot: repoInfo.root });
   const worktreesToRemove: Array<{ branch: string; path: string; hasChanges: boolean }> = [];
 
-  for (const branch of toClean) {
+  await Promise.all(Array.from(toClean).map(async branch => {
     const worktree = gitWorktrees.find(wt => wt.branch === branch && wt.path !== repoInfo.root);
     if (worktree && worktree.path.startsWith(worktreesRoot)) {
-      const status = getWorktreeStatus({ path: worktree.path });
+      const status = await getWorktreeStatusAsync({ path: worktree.path });
       worktreesToRemove.push({
         branch,
         path: worktree.path,
         hasChanges: status.hasChanges,
       });
     }
-  }
+  }));
 
   if (worktreesToRemove.length === 0) {
     success({ message: 'No worktrees to clean up!' });
@@ -83,7 +83,7 @@ export async function cleanupCommand() {
   let removed = 0;
   for (const wt of branchesToRemove) {
     try {
-      removeWorktree({ repoRoot: repoInfo.root, path: wt.path });
+      removeWorktree({ path: wt.path });
       info({ message: `Removed: ${wt.branch}` });
       removed++;
     } catch (unknownError) {

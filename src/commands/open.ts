@@ -5,7 +5,7 @@ import { detectRepoInfo } from '../repo.ts';
 import { loadConfig, expandPath } from '../config.ts';
 import {
   listWorktrees,
-  getWorktreeStatus,
+  getWorktreeStatusAsync,
   branchExists,
   createWorktree,
   createWorktreeFromRemote,
@@ -26,9 +26,10 @@ function parseEditorCommand(args: { editor: string }) {
   };
 }
 
-export async function openCommand(args: { open: boolean }) {
+export async function openCommand(args: { open: boolean; branch?: string }) {
   // All parameters required
   const openRequested = args.open;
+  const branch = args.branch;
   const repoInfo = detectRepoInfo({ cwd: process.cwd() });
   if (!repoInfo) {
     error({ message: 'Not in a git repository' });
@@ -44,15 +45,30 @@ export async function openCommand(args: { open: boolean }) {
     message: 'Loading worktrees…',
     task: () => listWorktrees({ repoRoot: repoInfo.root }),
   });
-  const worktrees: Worktree[] = gitWorktrees.map(wt => {
-    const status = getWorktreeStatus({ path: wt.path });
+  const worktrees: Worktree[] = await Promise.all(gitWorktrees.map(async wt => {
+    const status = await getWorktreeStatusAsync({ path: wt.path });
     return {
       path: wt.path,
       branch: wt.branch,
       isMain: wt.path === repoInfo.root,
       status,
     };
-  });
+  }));
+
+  if (branch) {
+    const match = worktrees.find(wt => wt.branch === branch);
+    if (!match) {
+      error({ message: `Worktree for branch '${branch}' not found.` });
+      process.exit(1);
+    }
+
+    console.log();
+    console.log(`📂 ${colorize({ text: match.path, color: 'cyan' })}`);
+    console.log();
+
+    openInEditorOrPrint({ path: match.path, shouldOpen, config });
+    return;
+  }
 
   const localBranches = new Set(worktrees.map(wt => wt.branch));
   const suggestionLimit = config.suggestionLimit ?? SUGGESTION_LIMIT_DEFAULT;
@@ -125,16 +141,7 @@ export async function openCommand(args: { open: boolean }) {
   console.log(`📂 ${colorize({ text: chosen.path, color: 'cyan' })}`);
   console.log();
 
-  if (shouldOpen && config.editor) {
-    info({ message: `Opening in ${config.editor}...` });
-    const editorCommand = parseEditorCommand({ editor: config.editor });
-    spawn(editorCommand.command, [...editorCommand.args, chosen.path], {
-      detached: true,
-      stdio: 'ignore',
-    }).unref();
-  } else {
-    console.log(colorize({ text: `cd ${chosen.path}`, color: 'dim' }));
-  }
+  openInEditorOrPrint({ path: chosen.path, shouldOpen, config });
 }
 
 async function handleSuggestionSelection(args: {
@@ -199,14 +206,23 @@ async function handleSuggestionSelection(args: {
   console.log(`📂 ${colorize({ text: worktreePath, color: 'cyan' })}`);
   console.log();
 
+  openInEditorOrPrint({ path: worktreePath, shouldOpen, config });
+}
+
+function openInEditorOrPrint(args: {
+  path: string;
+  shouldOpen: boolean;
+  config: Config;
+}) {
+  const { path, shouldOpen, config } = args;
   if (shouldOpen && config.editor) {
     info({ message: `Opening in ${config.editor}...` });
     const editorCommand = parseEditorCommand({ editor: config.editor });
-    spawn(editorCommand.command, [...editorCommand.args, worktreePath], {
+    spawn(editorCommand.command, [...editorCommand.args, path], {
       detached: true,
       stdio: 'ignore',
     }).unref();
   } else {
-    console.log(colorize({ text: `cd ${worktreePath}`, color: 'dim' }));
+    console.log(colorize({ text: `cd ${path}`, color: 'dim' }));
   }
 }
